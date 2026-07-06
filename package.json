@@ -9,7 +9,10 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "server": "node server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "migrate": "node migrate.js",
+    "seed": "node seed.js",
+    "setup": "node migrate.js && node seed.js"
   },
   "keywords": [],
   "author": "",
