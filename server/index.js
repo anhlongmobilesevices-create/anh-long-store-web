@@ -1,0 +1,117 @@
+import express from 'express'
+import cors from 'cors'
+import dotenv from 'dotenv'
+import jwt from 'jsonwebtoken'
+import bcryptjs from 'bcryptjs'
+import pkg from 'pg'
+
+dotenv.config()
+
+const { Pool } = pkg
+const app = express()
+const PORT = process.env.PORT || 3001
+
+// Middleware
+app.use(cors())
+app.use(express.json())
+
+// Database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+})
+
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+
+// Admin credentials (hardcoded for now)
+const ADMIN_EMAIL = 'admin@anhlongmobile.com'
+const ADMIN_PASSWORD_HASH = bcryptjs.hashSync('admin123', 10)
+
+// Routes
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body
+
+    if (email === ADMIN_EMAIL && bcryptjs.compareSync(password, ADMIN_PASSWORD_HASH)) {
+      const token = jwt.sign({ email, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' })
+      return res.json({
+        token,
+        user: { email, role: 'admin' }
+      })
+    }
+
+    res.status(401).json({ error: 'Invalid credentials' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Middleware to verify JWT
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1]
+  if (!token) return res.status(401).json({ error: 'No token' })
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    req.user = decoded
+    next()
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' })
+  }
+}
+
+// Get all portfolio items
+app.get('/api/portfolio', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM portfolio ORDER BY id DESC')
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Get portfolio item by ID
+app.get('/api/portfolio/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM portfolio WHERE id = $1', [req.params.id])
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' })
+    res.json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Update portfolio item
+app.put('/api/portfolio/:id', verifyToken, async (req, res) => {
+  try {
+    const { title, description, category } = req.body
+    const result = await pool.query(
+      'UPDATE portfolio SET title = $1, description = $2, category = $3 WHERE id = $4 RETURNING *',
+      [title, description, category, req.params.id]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' })
+    res.json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Delete portfolio item
+app.delete('/api/portfolio/:id', verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM portfolio WHERE id = $1 RETURNING *', [req.params.id])
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' })
+})
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})
