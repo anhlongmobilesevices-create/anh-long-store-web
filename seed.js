@@ -1,110 +1,63 @@
-import pkg from 'pg'
-import dotenv from 'dotenv'
+#!/usr/bin/env node
 
-dotenv.config()
+import pkg from 'pg';
+import dotenv from 'dotenv';
 
-const { Pool } = pkg
+dotenv.config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
-})
+const { Client } = pkg;
 
-// Sample portfolio data - 484 items covering various phone repair services
-const portfolioData = [
-  // iPhone Screen Repairs (100 items)
-  ...Array.from({ length: 100 }, (_, i) => ({
-    title: `iPhone Screen Repair #${i + 1}`,
-    description: `Professional iPhone screen replacement service. Genuine parts, warranty included.`,
-    category: 'Thay Màn Hình iPhone'
-  })),
-  
-  // iPad Repairs (80 items)
-  ...Array.from({ length: 80 }, (_, i) => ({
-    title: `iPad Repair #${i + 1}`,
-    description: `iPad screen, battery, and component replacement services.`,
-    category: 'Sửa Chữa iPad'
-  })),
-  
-  // MacBook Repairs (80 items)
-  ...Array.from({ length: 80 }, (_, i) => ({
-    title: `MacBook Repair #${i + 1}`,
-    description: `MacBook screen, keyboard, battery, and logic board repairs.`,
-    category: 'Sửa Chữa MacBook'
-  })),
-  
-  // Android Phone Repairs (100 items)
-  ...Array.from({ length: 100 }, (_, i) => ({
-    title: `Android Phone Repair #${i + 1}`,
-    description: `Samsung, Xiaomi, Oppo, Vivo phone repairs and screen replacement.`,
-    category: 'Sửa Chữa Điện Thoại Android'
-  })),
-  
-  // Battery Replacement (50 items)
-  ...Array.from({ length: 50 }, (_, i) => ({
-    title: `Battery Replacement #${i + 1}`,
-    description: `Phone battery replacement service with warranty.`,
-    category: 'Thay Pin Điện Thoại'
-  })),
-  
-  // Charging Port Repair (40 items)
-  ...Array.from({ length: 40 }, (_, i) => ({
-    title: `Charging Port Repair #${i + 1}`,
-    description: `Charging port repair and replacement for all phone models.`,
-    category: 'Sửa Cổng Sạc'
-  })),
-  
-  // Water Damage Repair (34 items)
-  ...Array.from({ length: 34 }, (_, i) => ({
-    title: `Water Damage Repair #${i + 1}`,
-    description: `Professional water damage restoration and component replacement.`,
-    category: 'Sửa Chữa Nước'
-  }))
-]
+async function seedDatabase() {
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+  });
 
-async function seed() {
   try {
-    console.log(`🌱 Seeding ${portfolioData.length} portfolio items...`)
+    await client.connect();
+    console.log('✓ Connected to PostgreSQL');
+
+    console.log('\n⏳ Seeding portfolio table...');
     
-    // Check if data already exists
-    const checkResult = await pool.query('SELECT COUNT(*) FROM portfolio')
-    const existingCount = parseInt(checkResult.rows[0].count)
-    
-    if (existingCount > 0) {
-      console.log(`⚠️  Portfolio already has ${existingCount} items. Skipping seed.`)
-      process.exit(0)
-    }
-    
-    // Insert data in batches
-    const batchSize = 50
-    for (let i = 0; i < portfolioData.length; i += batchSize) {
-      const batch = portfolioData.slice(i, i + batchSize)
-      
-      for (const item of batch) {
-        await pool.query(
-          'INSERT INTO portfolio (title, description, category) VALUES ($1, $2, $3)',
-          [item.title, item.description, item.category]
-        )
-      }
-      
-      console.log(`✅ Inserted ${Math.min(i + batchSize, portfolioData.length)}/${portfolioData.length}`)
-    }
-    
-    console.log(`✅ Successfully seeded ${portfolioData.length} portfolio items`)
-    
-    // Show summary
-    const result = await pool.query('SELECT category, COUNT(*) FROM portfolio GROUP BY category ORDER BY category')
-    console.log('\n📊 Portfolio Summary:')
-    result.rows.forEach(row => {
-      console.log(`  - ${row.category}: ${row.count} items`)
-    })
-    
-    process.exit(0)
-  } catch (err) {
-    console.error('❌ Seed failed:', err.message)
-    process.exit(1)
+    const result = await client.query(`
+      INSERT INTO portfolio (title, description, category) VALUES
+      (
+        'iPhone 15 Pro Max Screen Repair',
+        'Successfully repaired a cracked OLED display on iPhone 15 Pro Max. Replaced with genuine Apple parts and tested all functionality including Face ID and True Tone.',
+        'Screen Repair'
+      ),
+      (
+        'Samsung Galaxy S24 Battery Replacement',
+        'Complete battery replacement for Samsung Galaxy S24. Removed old battery safely and installed new OEM battery with full capacity restoration. Device now holds charge for 24+ hours.',
+        'Battery Service'
+      ),
+      (
+        'MacBook Pro Logic Board Repair',
+        'Diagnosed and repaired a faulty logic board on MacBook Pro 16-inch. Replaced damaged capacitors and tested all ports and functions. Device fully operational.',
+        'Computer Repair'
+      ),
+      (
+        'iPad Air Charging Port Replacement',
+        'Replaced damaged USB-C charging port on iPad Air. Micro-soldering work completed with precision. Device charges normally and data transfer works perfectly.',
+        'Port Repair'
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING id;
+    `);
+
+    console.log(`✓ Inserted ${result.rows.length} portfolio items`);
+
+    // Verify data
+    const countResult = await client.query('SELECT COUNT(*) as count FROM portfolio;');
+    console.log(`✓ Portfolio table now has ${countResult.rows[0].count} items\n`);
+
+    console.log('✅ Database seeding completed successfully!');
+  } catch (error) {
+    console.error('❌ Seeding failed:', error.message);
+    process.exit(1);
   } finally {
-    await pool.end()
+    await client.end();
   }
 }
 
-seed()
+seedDatabase();
+
