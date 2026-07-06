@@ -4,12 +4,18 @@ import dotenv from 'dotenv'
 import jwt from 'jsonwebtoken'
 import bcryptjs from 'bcryptjs'
 import pkg from 'pg'
+import { fileURLToPath } from 'url'
+import path from 'path'
+import fs from 'fs'
 
 dotenv.config()
 
 const { Pool } = pkg
 const app = express()
 const PORT = process.env.PORT || 3001
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Middleware
 app.use(cors())
@@ -26,6 +32,36 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 // Admin credentials (hardcoded for now)
 const ADMIN_EMAIL = 'admin@anhlongmobile.com'
 const ADMIN_PASSWORD_HASH = bcryptjs.hashSync('admin123', 10)
+
+// Run migrations on startup
+async function runMigrations() {
+  try {
+    const client = await pool.connect()
+    console.log('Running database migrations...')
+
+    const migrationsDir = path.join(__dirname, '../migrations')
+    if (fs.existsSync(migrationsDir)) {
+      const files = fs.readdirSync(migrationsDir).sort()
+
+      for (const file of files) {
+        if (file.endsWith('.sql')) {
+          const filePath = path.join(migrationsDir, file)
+          const sql = fs.readFileSync(filePath, 'utf8')
+          
+          console.log(`Running migration: ${file}`)
+          await client.query(sql)
+          console.log(`✓ Completed: ${file}`)
+        }
+      }
+    }
+
+    client.release()
+    console.log('All migrations completed successfully')
+  } catch (error) {
+    console.error('Migration error:', error)
+    process.exit(1)
+  }
+}
 
 // Routes
 app.post('/api/login', async (req, res) => {
@@ -81,6 +117,20 @@ app.get('/api/portfolio/:id', async (req, res) => {
   }
 })
 
+// Create portfolio item
+app.post('/api/portfolio', verifyToken, async (req, res) => {
+  try {
+    const { title, description, category } = req.body
+    const result = await pool.query(
+      'INSERT INTO portfolio (title, description, category) VALUES ($1, $2, $3) RETURNING *',
+      [title, description, category]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Update portfolio item
 app.put('/api/portfolio/:id', verifyToken, async (req, res) => {
   try {
@@ -112,6 +162,18 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+// Start server
+async function start() {
+  try {
+    await runMigrations()
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`)
+    })
+  } catch (error) {
+    console.error('Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+start()
+
