@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { Router, Route } from 'wouter'
 import Login from './components/Login'
 import AdminDashboard from './components/AdminDashboard'
+import Home from './pages/Home'
 import './App.css'
 
 export default function App() {
@@ -35,12 +37,26 @@ export default function App() {
   if (loading) return <div>Loading...</div>
 
   return (
-    <div className="app">
-      {isAuthenticated ? (
-        <AdminDashboard user={user} onLogout={handleLogout} />
-      ) : (
-        <Login onLoginSuccess={handleLoginSuccess} />
-      )}
-    </div>
+    <Router>
+      <Route path="/">
+        {() => <Home />}
+      </Route>
+      
+      <Route path="/admin">
+        {() => isAuthenticated ? (
+          <AdminDashboard user={user} onLogout={handleLogout} />
+        ) : (
+          <Login onLoginSuccess={handleLoginSuccess} />
+        )}
+      </Route>
+
+      <Route path="/login">
+        {() => isAuthenticated ? (
+          <AdminDashboard user={user} onLogout={handleLogout} />
+        ) : (
+          <Login onLoginSuccess={handleLoginSuccess} />
+        )}
+      </Route>
+    </Router>
   )
 }
