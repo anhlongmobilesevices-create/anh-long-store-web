@@ -81,13 +81,32 @@ app.get('/api/portfolio/:id', async (req, res) => {
   }
 })
 
+// Create portfolio item
+app.post('/api/portfolio', verifyToken, async (req, res) => {
+  try {
+    const { title, description, category, image_url } = req.body
+    
+    if (!title || !category) {
+      return res.status(400).json({ error: 'Title and category are required' })
+    }
+
+    const result = await pool.query(
+      'INSERT INTO portfolio (title, description, category, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
+      [title, description || '', category, image_url || null]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Update portfolio item
 app.put('/api/portfolio/:id', verifyToken, async (req, res) => {
   try {
-    const { title, description, category } = req.body
+    const { title, description, category, image_url } = req.body
     const result = await pool.query(
-      'UPDATE portfolio SET title = $1, description = $2, category = $3 WHERE id = $4 RETURNING *',
-      [title, description, category, req.params.id]
+      'UPDATE portfolio SET title = $1, description = $2, category = $3, image_url = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+      [title, description, category, image_url, req.params.id]
     )
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' })
     res.json(result.rows[0])
